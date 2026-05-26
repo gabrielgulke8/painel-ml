@@ -1,51 +1,216 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
 const app = express();
 
-app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const APP_ID = '1676926349566548';
 const SECRET = 'mrmjbwY1pPyqODJ4XXKTZfyipbMwaRIM';
 const REDIRECT = 'https://www.mercadolivre';
+const TOKEN_FILE = path.join('/tmp', 'ml_tokens.json');
 
-// Troca código por token
+// ── TOKEN STORAGE ──
+function loadTokens() {
+  try {
+    if (fs.existsSync(TOKEN_FILE)) {
+      return JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
+    }
+  } catch (e) {}
+  return { access_token: null, refresh_token: null, user_id: null, expires_at: 0 };
+}
+
+function saveTokens(data) {
+  try {
+    const tokens = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      user_id: data.user_id || loadTokens().user_id,
+      expires_at: Date.now() + (data.expires_in || 21600) * 1000
+    };
+    fs.writeFileSync(TOKEN_FILE, JSON.stringify(tokens));
+    return tokens;
+  } catch (e) {
+    console.error('Erro ao salvar tokens:', e);
+    return null;
+  }
+}
+
+// ── AUTO REFRESH ──
+async function getValidToken() {
+  const tokens = loadTokens();
+  if (!tokens.access_token) return null;
+
+  // Renova se faltar menos de 30 minutos
+  if (Date.now() > tokens.expires_at - 1800000) {
+    console.log('Renovando token automaticamente...');
+    try {
+      const r = await fetch('https://api.mercadolibre.com/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          client_id: APP_ID,
+          client_secret: SECRET,
+          refresh_token: tokens.refresh_token
+        })
+      });
+      const d = await r.json();
+      if (d.access_token) {
+        const saved = saveTokens(d);
+        console.log('Token renovado com sucesso');
+        return saved.access_token;
+      }
+    } catch (e) {
+      console.error('Erro ao renovar token:', e);
+    }
+  }
+  return tokens.access_token;
+}
+
+// Renovação automática a cada 5h
+setInterval(async () => {
+  console.log('Verificando token...');
+  await getValidToken();
+}, 5 * 60 * 60 * 1000);
+
+// ── TOKEN OAUTH ──
 app.post('/token', async (req, res) => {
   try {
     const { code, refresh_token, grant_type } = req.body;
     const params = grant_type === 'refresh_token'
       ? { grant_type: 'refresh_token', client_id: APP_ID, client_secret: SECRET, refresh_token }
       : { grant_type: 'authorization_code', client_id: APP_ID, client_secret: SECRET, code, redirect_uri: REDIRECT };
+
     const r = await fetch('https://api.mercadolibre.com/oauth/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
       body: new URLSearchParams(params)
     });
     const data = await r.json();
+    if (data.access_token) {
+      saveTokens(data);
+      console.log('Tokens salvos no servidor para user:', data.user_id);
+    }
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Proxy para API do ML
-app.get('/api/*', async (req, res) => {
+// ── STATUS DO TOKEN ──
+app.get('/token/status', (req, res) => {
+  const tokens = loadTokens();
+  const minutesLeft = tokens.expires_at ? Math.round((tokens.expires_at - Date.now()) / 60000) : 0;
+  res.json({
+    connected: !!tokens.access_token,
+    user_id: tokens.user_id,
+    expires_in_minutes: minutesLeft,
+    auto_renew: true
+  });
+});
+
+// ── VENDAS COM TAXAS DETALHADAS ──
+app.get('/vendas', async (req, res) => {
   try {
-    const token = req.headers['authorization'];
-    const path = req.params[0];
-    const query = req.url.split('?')[1] || '';
-    const url = `https://api.mercadolibre.com/${path}${query ? '?' + query : ''}`;
-    const r = await fetch(url, { headers: { Authorization: token } });
+    const token = await getValidToken();
+    if (!token) return res.status(401).json({ error: 'Token não encontrado. Faça login novamente.' });
+
+    const seller = req.query.seller || loadTokens().user_id;
+    const limit = req.query.limit || 50;
+
+    const rOrders = await fetch(
+      `https://api.mercadolibre.com/orders/search?seller=${seller}&sort=date_desc&limit=${limit}`,
+      { headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' } }
+    );
+
+    if (!rOrders.ok) {
+      const err = await rOrders.json();
+      return res.status(rOrders.status).json(err);
+    }
+
+    const ordersData = await rOrders.json();
+    const orders = ordersData.results || [];
+
+    const vendas = await Promise.all(orders.map(async (o) => {
+      let freteVendedor = 0;
+      let freteComprador = 0;
+      let taxaParcelamento = 0;
+
+      try {
+        if (o.shipping && o.shipping.id) {
+          const rShip = await fetch(
+            `https://api.mercadolibre.com/shipments/${o.shipping.id}`,
+            { headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' } }
+          );
+          if (rShip.ok) {
+            const ship = await rShip.json();
+            freteVendedor = ship.shipping_option?.cost || ship.base_cost || 0;
+            freteComprador = ship.shipping_option?.list_cost || 0;
+          }
+        }
+      } catch (e) {}
+
+      try {
+        (o.payments || []).forEach(p => {
+          if (p.installments && p.installments > 1) {
+            taxaParcelamento += (p.total_paid_amount || 0) - (p.transaction_amount || 0);
+          }
+        });
+      } catch (e) {}
+
+      return (o.order_items || []).map(i => ({
+        title: i.item?.title || '',
+        item_id: i.item?.id || '',
+        unit_price: i.unit_price || 0,
+        quantity: i.quantity || 1,
+        sale_fee: o.payments?.[0]?.marketplace_fee || 0,
+        shipping_cost: freteVendedor,
+        shipping_cost_comprador: freteComprador,
+        taxa_parcelamento: taxaParcelamento,
+        date_created: o.date_created,
+        order_id: o.id,
+        order_status: o.status,
+        payment_status: o.payments?.[0]?.status || '',
+        installments: o.payments?.[0]?.installments || 1,
+      }));
+    }));
+
+    res.json({ results: vendas.flat() });
+  } catch (e) {
+    console.error('Erro /vendas:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── PROXY GENÉRICO ──
+app.use('/api', async (req, res) => {
+  try {
+    const token = await getValidToken();
+    if (!token) return res.status(401).json({ error: 'Token não encontrado' });
+    const mlPath = req.path;
+    const query = Object.keys(req.query).length ? '?' + new URLSearchParams(req.query).toString() : '';
+    const url = `https://api.mercadolibre.com${mlPath}${query}`;
+    const r = await fetch(url, {
+      method: req.method,
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' },
+      body: req.method !== 'GET' ? JSON.stringify(req.body) : undefined
+    });
     const data = await r.json();
-    res.json(data);
+    res.status(r.status).json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-app.get('/', (req, res) => res.send('Painel ML Server rodando ✅'));
+app.get('/', (req, res) => {
+  const tokens = loadTokens();
+  res.send(`Painel ML Server ✅ | Conectado: ${!!tokens.access_token} | User: ${tokens.user_id || 'N/A'}`);
+});
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Server rodando na porta ' + PORT));
+app.listen(PORT, () => console.log('Server na porta ' + PORT));
