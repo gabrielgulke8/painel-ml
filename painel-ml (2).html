@@ -606,7 +606,9 @@ async function buscarVendas() {
   setStatus('Buscando vendas...', false);
   try {
     const uid = getUserId();
-    const r = await fetch(`https://api.mercadolibre.com/orders/search?seller=${uid}&sort=date_desc&limit=50`, {
+    const r = await fetch(`https://painel-ml-server.onrender.com/api/orders
+
+/search?seller=${uid}&sort=date_desc&limit=50`, {
       headers: { Authorization: 'Bearer ' + token }
     });
     if (r.status === 401) { await renovarToken(); buscarVendas(); return; }
