@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel ML — Margem de Vendas</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+  :root {
+    --bg:#f7f5f0;--surface:#fff;--border:#e8e3d8;--text:#1a1a1a;--muted:#888;
+    --green:#0F6E56;--green-bg:#eafaf1;--red:#A32D2D;--red-bg:#fef0f0;
+    --yellow:#FFE600;--radius:12px;--radius-sm:8px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
+  .logo{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600}
+  .logo-icon{width:30px;height:30px;background:var(--yellow);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px}
+  .header-right{display:flex;align-items:center;gap:12px}
+  .status-pill{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);background:var(--bg);padding:5px 12px;border-radius:20px;border:1px solid var(--border)}
+  .dot{width:7px;height:7px;border-radius:50%;background:#ccc}
+  .dot.ok{background:#1D9E75}.dot.err{background:#E24B4A}
+  main{max-width:1100px;margin:0 auto;padding:2rem}
+  .tabs{display:flex;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:4px;margin-bottom:1.5rem;width:fit-content;flex-wrap:wrap}
+  .tab{padding:7px 16px;font-size:13px;font-weight:500;border:none;background:none;border-radius:var(--radius-sm);cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .15s}
+  .tab.active{background:var(--text);color:#fff}
+  .sec{display:none}.sec.active{display:block}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem}
+  .metric{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+  .metric label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+  .metric .val{font-size:22px;font-weight:600}
+  .val.green{color:var(--green)}.val.red{color:var(--red)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-bottom:1rem}
+  .card h3{font-size:14px;font-weight:600;margin-bottom:1rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem}
+  .token-info{font-size:12px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;margin-bottom:1rem}
+  .sale{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)}
+  .sale:last-child{border-bottom:none}
+  .sale-title{font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sale-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .bdg{font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;background:var(--green-bg);color:var(--green)}
+  .bdg.neg{background:var(--red-bg);color:var(--red)}
+  .bdg.warn{background:#fff8e0;color:#7a5500}
+  .btn{padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;transition:all .15s}
+  .btn:hover{background:var(--bg)}
+  .btn.pri{background:var(--text);color:#fff;border-color:var(--text)}
+  .btn.pri:hover{opacity:.85}
+  .btn.wpp{background:#1DAF5C;color:#fff;border-color:#1DAF5C;padding:7px 12px}
+  .btn.wpp:hover{background:#178a49}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  .btn.danger{background:var(--red-bg);color:var(--red);border-color:#f5c1c1}
+  .fr{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+  .fr:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+  .fr label{flex:1;font-size:14px;color:var(--text)}
+  .fr .hint{font-size:12px;color:var(--muted)}
+  .fr input{width:120px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:'DM Mono',monospace;font-size:13px;color:var(--text);background:var(--bg);text-align:right;outline:none}
+  .fr input:focus{border-color:var(--text);background:#fff}
+  .fr .un{font-size:13px;color:var(--muted);width:28px}
+  .empty{text-align:center;padding:3rem;color:var(--muted);font-size:14px}
+  .empty-icon{font-size:36px;display:block;margin-bottom:10px}
+  .auth-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1rem}
+  .auth-box h4{font-size:14px;font-weight:600;margin-bottom:8px}
+  .auth-box p{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:1rem}
+  .auth-field{margin-bottom:12px}
+  .auth-field label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px}
+  .auth-field input{width:100%;padding:9px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:'DM Mono',monospace;font-size:13px;background:#fff;outline:none;color:var(--text)}
+  .auth-field input:focus{border-color:var(--text)}
+  .status-msg{padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;margin-top:10px;display:none}
+  .status-msg.ok{background:var(--green-bg);color:var(--green)}
+  .status-msg.err{background:var(--red-bg);color:var(--red)}
+  .status-msg.info{background:#fff8e0;color:#7a5500}
+  .steps{counter-reset:step}
+  .step{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;font-size:13px;color:#444;line-height:1.5}
+  .step-n{min-width:22px;height:22px;background:var(--text);color:#fff;border-radius:50%;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  /* PRODUTOS */
+  .prod-table{width:100%;border-collapse:collapse;font-size:13px}
+  .prod-table th{text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+  .prod-table td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+  .prod-table tr:last-child td{border-bottom:none}
+  .prod-table input{width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);outline:none}
+  .prod-table input:focus{border-color:var(--text);background:#fff}
+  .drop-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:2rem;text-align:center;color:var(--muted);font-size:14px;cursor:pointer;transition:all .15s;margin-bottom:1rem}
+  .drop-zone:hover,.drop-zone.drag{border-color:var(--text);color:var(--text);background:var(--bg)}
+  .drop-zone input[type=file]{display:none}
+  .cmv-badge{font-size:11px;padding:2px 7px;border-radius:10px;background:#e8f4ff;color:#185FA5;margin-left:6px}
+  @media(max-width:700px){.grid4{grid-template-columns:repeat(2,1fr)}main{padding:1rem}header{padding:0 1rem}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛒</div>
+    Painel ML
+  </div>
+  <div class="header-right">
+    <div class="status-pill">
+      <span class="dot" id="dot"></span>
+      <span id="stxt">Iniciando...</span>
+    </div>
+    <button class="btn" onclick="buscarVendas()">↻ Atualizar</button>
+  </div>
+</header>
+
+<main>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('vendas',this)">📦 Vendas</button>
+    <button class="tab" onclick="showTab('produtos',this)">🏷️ Produtos / CMV</button>
+    <button class="tab" onclick="showTab('config',this)">⚙️ Configurações</button>
+    <button class="tab" onclick="showTab('auth',this)">🔐 Conta ML</button>
+  </div>
+
+  <!-- VENDAS -->
+  <div id="sec-vendas" class="sec active">
+    <div class="grid4">
+      <div class="metric"><label>Vendas</label><div class="val" id="m-tot">—</div></div>
+      <div class="metric"><label>Receita total</label><div class="val" id="m-rec">—</div></div>
+      <div class="metric"><label>Margem média</label><div class="val green" id="m-mar">—</div></div>
+      <div class="metric"><label>Lucro líquido</label><div class="val green" id="m-luc">—</div></div>
+    </div>
+    <div class="token-info" id="token-info">Verificando autenticação...</div>
+    <div class="card">
+      <div class="topbar">
+        <h3 style="margin:0">Últimas vendas</h3>
+        <span style="font-size:12px;color:var(--muted)" id="ultima-att"></span>
+      </div>
+      <div id="lista"><div class="empty"><span class="empty-icon">📦</span>Carregando vendas...</div></div>
+    </div>
+  </div>
+
+  <!-- PRODUTOS -->
+  <div id="sec-produtos" class="sec">
+    <div class="card">
+      <h3>Importar planilha (CSV ou Excel)</h3>
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+        <input type="file" id="file-input" accept=".csv,.xlsx,.xls" onchange="lerArquivo(this.files[0])">
+        📂 Clique ou arraste sua planilha aqui<br>
+        <span style="font-size:12px;margin-top:6px;display:block">CSV ou Excel · Colunas esperadas: <strong>SKU</strong> (ou nome) e <strong>Custo</strong></span>
+      </div>
+      <div class="status-msg" id="st-import"></div>
+      <div style="margin-top:10px;font-size:12px;color:var(--muted)">
+        Modelo de planilha: <strong>SKU</strong> | <strong>Nome</strong> | <strong>Custo</strong><br>
+        Ex: <code>MLB123 | Camiseta Azul P | 18.50</code>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="topbar">
+        <h3 style="margin:0">Tabela de custos por produto</h3>
+        <div style="display:flex;gap:8px">
+          <button class="btn sm" onclick="adicionarProduto()">+ Adicionar</button>
+          <button class="btn sm pri" onclick="salvarProdutos()">💾 Salvar</button>
+          <button class="btn sm" onclick="exportarProdutos()">⬇ Exportar CSV</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="prod-table">
+          <thead>
+            <tr>
+              <th style="width:160px">SKU / ID</th>
+              <th>Nome do produto</th>
+              <th style="width:120px">Custo (R$)</th>
+              <th style="width:60px"></th>
+            </tr>
+          </thead>
+          <tbody id="prod-body"></tbody>
+        </table>
+      </div>
+      <div id="prod-empty" class="empty" style="display:none"><span class="empty-icon">🏷️</span>Nenhum produto cadastrado ainda</div>
+      <div style="margin-top:12px;font-size:12px;color:var(--muted)" id="prod-count"></div>
+    </div>
+  </div>
+
+  <!-- CONFIG -->
+  <div id="sec-config" class="sec">
+    <div class="card">
+      <h3>Custos e deduções gerais</h3>
+      <div class="fr">
+        <div style="flex:1"><label>Imposto / DAS</label><div class="hint">Simples Nacional, MEI etc.</div></div>
+        <input type="number" id="c-imp" value="6" min="0" max="100" step="0.1" oninput="salvar()">
+        <span class="un">%</span>
+      </div>
+      <div class="fr">
+        <div style="flex:1"><label>Custo fixo por venda</label><div class="hint">Rateio de aluguel, funcionário etc.</div></div>
+        <input type="number" id="c-fix" value="0" min="0" step="0.01" oninput="salvar()">
+        <span class="un">R$</span>
+      </div>
+      <div class="fr">
+        <div style="flex:1"><label>Embalagem por pedido</label><div class="hint">Caixa, fita, plástico bolha</div></div>
+        <input type="number" id="c-emb" value="2" min="0" step="0.01" oninput="salvar()">
+        <span class="un">R$</span>
+      </div>
+      <div class="fr">
+        <div style="flex:1"><label>Taxa de devolução estimada</label><div class="hint">% de pedidos devolvidos</div></div>
+        <input type="number" id="c-dev" value="2" min="0" max="100" step="0.1" oninput="salvar()">
+        <span class="un">%</span>
+      </div>
+      <div class="fr">
+        <div style="flex:1"><label>CMV padrão (fallback)</label><div class="hint">Usado quando produto não está cadastrado</div></div>
+        <input type="number" id="c-cmv" value="0" min="0" step="0.01" oninput="salvar()">
+        <span class="un">R$</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Alertas e atualização</h3>
+      <div class="fr">
+        <div style="flex:1"><label>Verificar novas vendas a cada</label></div>
+        <input type="number" id="c-int" value="5" min="1" max="60" oninput="salvar()">
+        <span class="un">min</span>
+      </div>
+      <div class="fr">
+        <div style="flex:1"><label>WhatsApp para alertas</label><div class="hint">Ex: 5511999999999</div></div>
+        <input type="text" id="c-wpp" placeholder="5511999999999" style="width:180px;text-align:left" oninput="salvar()">
+        <span class="un"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTH -->
+  <div id="sec-auth" class="sec">
+    <div class="card">
+      <h3>Autenticação Mercado Livre</h3>
+      <div class="auth-box">
+        <h4>Opção 1 — Já tenho tokens</h4>
+        <div class="auth-field"><label>Access Token</label><input type="text" id="a-access" placeholder="APP_USR-..."></div>
+        <div class="auth-field"><label>Refresh Token</label><input type="text" id="a-refresh" placeholder="TG-..."></div>
+        <div class="auth-field"><label>User ID</label><input type="text" id="a-userid" placeholder="401295210"></div>
+        <button class="btn pri" onclick="salvarTokens()">💾 Salvar tokens</button>
+        <div class="status-msg" id="st-tokens"></div>
+      </div>
+      <div class="auth-box">
+        <h4>Opção 2 — Fazer login agora</h4>
+        <div class="steps">
+          <div class="step"><div class="step-n">1</div><div>Clique em <strong>Abrir login ML</strong></div></div>
+          <div class="step"><div class="step-n">2</div><div>Autorize e copie o código da URL: <code style="font-size:11px">?code=TG-XXXX</code></div></div>
+          <div class="step"><div class="step-n">3</div><div>Cole abaixo e clique em <strong>Trocar pelo token</strong></div></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:1rem">
+          <button class="btn pri" onclick="abrirLogin()">🔐 Abrir login ML</button>
+        </div>
+        <div class="auth-field" style="margin-top:1rem">
+          <label>Código de autorização</label>
+          <input type="text" id="a-code" placeholder="TG-...">
+        </div>
+        <button class="btn" onclick="trocarToken()">🔄 Trocar pelo Access Token</button>
+        <div class="status-msg" id="st-code"></div>
+      </div>
+      <div id="auth-ok" style="display:none" class="auth-box">
+        <h4>✅ Conta conectada</h4>
+        <p id="auth-ok-txt"></p>
+        <p style="margin-top:4px">Token renova automaticamente a cada 5h55min.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const APP_ID = '1676926349566548';
+const SECRET = 'mrmjbwY1pPyqODJ4XXKTZfyipbMwaRIM';
+const REDIRECT = 'https://www.mercadolivre';
+
+let cfg = {};
+let vendas = [];
+let produtos = {}; // { "sku_ou_nome_normalizado": custo }
+let timerAuto = null;
+let vendaIds = new Set();
+
+// ── TABS ──
+function showTab(t, el) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('sec-' + t).classList.add('active');
+}
+
+// ── CONFIG ──
+function salvar() {
+  cfg = {
+    imp: parseFloat(document.getElementById('c-imp').value) || 0,
+    fix: parseFloat(document.getElementById('c-fix').value) || 0,
+    emb: parseFloat(document.getElementById('c-emb').value) || 0,
+    dev: parseFloat(document.getElementById('c-dev').value) || 0,
+    cmv: parseFloat(document.getElementById('c-cmv').value) || 0,
+    int: parseInt(document.getElementById('c-int').value) || 5,
+    wpp: document.getElementById('c-wpp').value.trim(),
+  };
+  localStorage.setItem('ml_cfg', JSON.stringify(cfg));
+  reiniciarTimer();
+  if (vendas.length > 0) renderVendas();
+}
+
+function carregarCfg() {
+  const s = localStorage.getItem('ml_cfg');
+  cfg = s ? JSON.parse(s) : { imp:6, fix:0, emb:2, dev:2, cmv:0, int:5, wpp:'' };
+  document.getElementById('c-imp').value = cfg.imp ?? 6;
+  document.getElementById('c-fix').value = cfg.fix ?? 0;
+  document.getElementById('c-emb').value = cfg.emb ?? 2;
+  document.getElementById('c-dev').value = cfg.dev ?? 2;
+  document.getElementById('c-cmv').value = cfg.cmv ?? 0;
+  document.getElementById('c-int').value = cfg.int ?? 5;
+  if (cfg.wpp) document.getElementById('c-wpp').value = cfg.wpp;
+}
+
+// ── PRODUTOS ──
+function norm(str) {
+  return (str || '').toString().toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function carregarProdutos() {
+  const s = localStorage.getItem('ml_produtos');
+  produtos = s ? JSON.parse(s) : {};
+  renderTabelaProdutos();
+}
+
+function salvarProdutos() {
+  // Lê da tabela HTML
+  const rows = document.querySelectorAll('#prod-body tr');
+  const novo = {};
+  rows.forEach(row => {
+    const sku = norm(row.querySelector('.p-sku')?.value);
+    const nome = norm(row.querySelector('.p-nome')?.value);
+    const custo = parseFloat(row.querySelector('.p-custo')?.value) || 0;
+    if ((sku || nome) && custo > 0) {
+      if (sku) novo[sku] = custo;
+      if (nome && nome !== sku) novo[nome] = custo;
+    }
+  });
+  produtos = novo;
+  localStorage.setItem('ml_produtos', JSON.stringify(produtos));
+  mostrarStatus('prod-count', '✅ ' + Object.keys(novo).length + ' produtos salvos!', 'ok', true);
+  if (vendas.length > 0) renderVendas();
+}
+
+function renderTabelaProdutos() {
+  const tbody = document.getElementById('prod-body');
+  const empty = document.getElementById('prod-empty');
+  // Constrói lista única por SKU (sem duplicar chaves nome+sku)
+  const vistos = new Set();
+  const linhas = [];
+  Object.entries(produtos).forEach(([k, v]) => {
+    if (!vistos.has(v + '|' + k)) { vistos.add(v + '|' + k); linhas.push([k, v]); }
+  });
+  if (linhas.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    document.getElementById('prod-count').textContent = 'Nenhum produto cadastrado.';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = linhas.map(([k, v], i) => `
+    <tr>
+      <td><input class="p-sku" value="${escHtml(k)}" placeholder="SKU ou ID"></td>
+      <td><input class="p-nome" value="${escHtml(k)}" placeholder="Nome do produto"></td>
+      <td><input class="p-custo" type="number" value="${v}" min="0" step="0.01" placeholder="0.00"></td>
+      <td><button class="btn sm danger" onclick="removerLinha(this)">✕</button></td>
+    </tr>`).join('');
+  document.getElementById('prod-count').textContent = linhas.length + ' produtos cadastrados · Clique em Salvar após editar';
+}
+
+function adicionarProduto() {
+  const empty = document.getElementById('prod-empty');
+  empty.style.display = 'none';
+  const tbody = document.getElementById('prod-body');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="p-sku" placeholder="SKU ou ID ML"></td>
+    <td><input class="p-nome" placeholder="Nome do produto"></td>
+    <td><input class="p-custo" type="number" value="" min="0" step="0.01" placeholder="0.00"></td>
+    <td><button class="btn sm danger" onclick="removerLinha(this)">✕</button></td>`;
+  tbody.appendChild(tr);
+  tr.querySelector('.p-sku').focus();
+}
+
+function removerLinha(btn) {
+  btn.closest('tr').remove();
+  const rows = document.querySelectorAll('#prod-body tr');
+  if (rows.length === 0) document.getElementById('prod-empty').style.display = 'block';
+}
+
+function getCmvProduto(titulo, itemId) {
+  const t = norm(titulo);
+  const id = norm(itemId);
+  if (id && produtos[id] !== undefined) return { custo: produtos[id], fonte: 'sku' };
+  // busca parcial por nome
+  for (const [k, v] of Object.entries(produtos)) {
+    if (t.includes(k) || k.includes(t)) return { custo: v, fonte: 'nome' };
+  }
+  return { custo: cfg.cmv || 0, fonte: 'padrao' };
+}
+
+// ── IMPORTAR PLANILHA ──
+function dragOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag'); }
+function dragLeave(e) { document.getElementById('drop-zone').classList.remove('drag'); }
+function dropFile(e) { e.preventDefault(); dragLeave(e); lerArquivo(e.dataTransfer.files[0]); }
+
+function lerArquivo(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv') {
+    const reader = new FileReader();
+    reader.onload = e => processarCSV(e.target.result);
+    reader.readAsText(file, 'UTF-8');
+  } else if (ext === 'xlsx' || ext === 'xls') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const csv = XLSX.utils.sheet_to_csv(ws);
+      processarCSV(csv);
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    mostrarStatus('st-import', 'Formato não suportado. Use CSV, XLSX ou XLS.', 'err');
+  }
+}
+
+function processarCSV(texto) {
+  const linhas = texto.trim().split('\n').map(l => l.split(/[,;|\t]/));
+  if (linhas.length < 2) { mostrarStatus('st-import', 'Planilha vazia ou inválida.', 'err'); return; }
+  const header = linhas[0].map(h => norm(h));
+  const iSku = header.findIndex(h => h.includes('sku') || h.includes('id') || h.includes('cod'));
+  const iNome = header.findIndex(h => h.includes('nome') || h.includes('descri') || h.includes('produto') || h.includes('title'));
+  const iCusto = header.findIndex(h => h.includes('custo') || h.includes('cmv') || h.includes('preco') || h.includes('valor') || h.includes('cost'));
+  if (iCusto === -1) { mostrarStatus('st-import', 'Coluna "Custo" não encontrada. Verifique o cabeçalho.', 'err'); return; }
+  let importados = 0;
+  linhas.slice(1).forEach(cols => {
+    const sku = iSku >= 0 ? norm(cols[iSku]) : '';
+    const nome = iNome >= 0 ? norm(cols[iNome]) : '';
+    const custoStr = (cols[iCusto] || '').replace(/[^\d.,]/g, '').replace(',', '.');
+    const custo = parseFloat(custoStr);
+    if (!isNaN(custo) && custo >= 0 && (sku || nome)) {
+      if (sku) produtos[sku] = custo;
+      if (nome && nome !== sku) produtos[nome] = custo;
+      importados++;
+    }
+  });
+  localStorage.setItem('ml_produtos', JSON.stringify(produtos));
+  renderTabelaProdutos();
+  mostrarStatus('st-import', '✅ ' + importados + ' produtos importados com sucesso!', 'ok');
+  if (vendas.length > 0) renderVendas();
+}
+
+function exportarProdutos() {
+  const rows = [['SKU', 'Nome', 'Custo']];
+  const vistos = new Set();
+  Object.entries(produtos).forEach(([k, v]) => {
+    if (!vistos.has(k)) { vistos.add(k); rows.push([k, k, v]); }
+  });
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'produtos-ml.csv';
+  a.click();
+}
+
+// ── AUTH ──
+function getToken() { return localStorage.getItem('ml_access_token'); }
+function getUserId() { return localStorage.getItem('ml_user_id') || '401295210'; }
+
+function atualizarInfoToken() {
+  const t = parseInt(localStorage.getItem('ml_token_time') || 0);
+  const mins = t ? Math.round((Date.now() - t) / 60000) : null;
+  const uid = getUserId();
+  const el = document.getElementById('token-info');
+  if (getToken()) {
+    el.innerHTML = '🔒 Token ativo · User ID: ' + uid + (mins !== null ? ' · obtido há ' + mins + ' min' : '') + ' · renova automaticamente a cada 5h55min';
+    document.getElementById('auth-ok').style.display = 'block';
+    document.getElementById('auth-ok-txt').textContent = 'Conectado · User ID: ' + uid;
+  } else {
+    el.innerHTML = '⚠️ Token não encontrado — vá na aba Conta ML para conectar';
+  }
+}
+
+function salvarTokens() {
+  const access = document.getElementById('a-access').value.trim();
+  const refresh = document.getElementById('a-refresh').value.trim();
+  const userid = document.getElementById('a-userid').value.trim();
+  if (!access || !refresh || !userid) { mostrarStatus('st-tokens', 'Preencha todos os campos', 'err'); return; }
+  localStorage.setItem('ml_access_token', access);
+  localStorage.setItem('ml_refresh_token', refresh);
+  localStorage.setItem('ml_user_id', userid);
+  localStorage.setItem('ml_token_time', Date.now());
+  mostrarStatus('st-tokens', '✅ Tokens salvos! Buscando vendas...', 'ok');
+  atualizarInfoToken();
+  setTimeout(buscarVendas, 800);
+}
+
+function abrirLogin() {
+  const url = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${APP_ID}&redirect_uri=${encodeURIComponent(REDIRECT)}`;
+  window.open(url, '_blank');
+}
+
+async function trocarToken() {
+  const code = document.getElementById('a-code').value.trim();
+  if (!code) { mostrarStatus('st-code', 'Cole o código primeiro', 'err'); return; }
+  mostrarStatus('st-code', 'Trocando código pelo token...', 'info');
+  try {
+    const r = await fetch('https://api.mercadolibre.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: APP_ID, client_secret: SECRET, code, redirect_uri: REDIRECT })
+    });
+    const d = await r.json();
+    if (d.access_token) {
+      localStorage.setItem('ml_access_token', d.access_token);
+      localStorage.setItem('ml_refresh_token', d.refresh_token);
+      localStorage.setItem('ml_user_id', d.user_id);
+      localStorage.setItem('ml_token_time', Date.now());
+      mostrarStatus('st-code', '✅ Conectado! Buscando vendas...', 'ok');
+      atualizarInfoToken();
+      setTimeout(buscarVendas, 800);
+    } else {
+      mostrarStatus('st-code', 'Erro: ' + (d.message || JSON.stringify(d)), 'err');
+    }
+  } catch (e) { mostrarStatus('st-code', 'Erro: ' + e.message, 'err'); }
+}
+
+async function renovarToken() {
+  const refresh = localStorage.getItem('ml_refresh_token');
+  if (!refresh) return;
+  try {
+    const r = await fetch('https://api.mercadolibre.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', client_id: APP_ID, client_secret: SECRET, refresh_token: refresh })
+    });
+    const d = await r.json();
+    if (d.access_token) {
+      localStorage.setItem('ml_access_token', d.access_token);
+      localStorage.setItem('ml_refresh_token', d.refresh_token);
+      localStorage.setItem('ml_token_time', Date.now());
+      atualizarInfoToken();
+    }
+  } catch (e) { console.error('Renovar token erro', e); }
+}
+
+// ── CÁLCULO DE MARGEM ──
+function calcMargem(v) {
+  const preco = v.unit_price * v.quantity;
+  const taxaML = v.sale_fee || 0;
+  const frete = v.shipping_cost || 0;
+  const imp = preco * (cfg.imp / 100);
+  const dev = preco * (cfg.dev / 100);
+  const { custo: cmvUnit, fonte } = getCmvProduto(v.title, v.item_id);
+  const cmv = cmvUnit * v.quantity;
+  const emb = cfg.emb * v.quantity;
+  const fix = cfg.fix;
+  const custos = taxaML + frete + imp + dev + cmv + emb + fix;
+  const lucro = preco - custos;
+  const margem = preco > 0 ? (lucro / preco) * 100 : 0;
+  return { preco, taxaML, frete, imp, dev, cmv, emb, fix, custos, lucro, margem, cmvFonte: fonte, cmvUnit };
+}
+
+// ── RENDER VENDAS ──
+function renderVendas() {
+  const lista = document.getElementById('lista');
+  if (vendas.length === 0) {
+    lista.innerHTML = '<div class="empty"><span class="empty-icon">📦</span>Nenhuma venda encontrada</div>';
+    return;
+  }
+  let totRec = 0, totLuc = 0, margens = [];
+  let html = '';
+  vendas.forEach(v => {
+    const m = calcMargem(v);
+    totRec += m.preco; totLuc += m.lucro; margens.push(m.margem);
+    const mc = m.margem >= 0 ? '' : 'neg';
+    const titulo = (v.title || 'Produto').substring(0, 45);
+    const data = v.date_created ? new Date(v.date_created).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    const fonteBdg = m.cmvFonte === 'padrao' ? '<span class="cmv-badge" title="Usando CMV padrão — cadastre este produto">CMV padrão</span>' : (m.cmvFonte === 'sku' ? '<span class="cmv-badge" style="background:#eafaf1;color:#0F6E56">CMV ✓</span>' : '<span class="cmv-badge" style="background:#fff8e0;color:#7a5500">CMV ~</span>');
+    const wppBtn = cfg.wpp ? `<button class="btn wpp" onclick='enviarWpp(${JSON.stringify(v).replace(/'/g, "\\'")})' title="Enviar WhatsApp">📲</button>` : '';
+    html += `<div class="sale">
+      <div style="flex:1;min-width:0">
+        <div class="sale-title">${titulo}${fonteBdg}</div>
+        <div class="sale-sub">${data} · Qtd: ${v.quantity} · Taxa ML: R$ ${m.taxaML.toFixed(2)} · CMV: R$ ${m.cmv.toFixed(2)}</div>
+      </div>
+      <div style="text-align:right;min-width:100px">
+        <div style="font-weight:600;font-size:14px">R$ ${m.preco.toFixed(2)}</div>
+        <div class="sale-sub">Lucro: R$ ${m.lucro.toFixed(2)}</div>
+      </div>
+      <span class="bdg ${mc}">${m.margem.toFixed(1)}%</span>
+      ${wppBtn}
+    </div>`;
+  });
+  lista.innerHTML = html;
+  const med = margens.length ? margens.reduce((a, b) => a + b, 0) / margens.length : 0;
+  document.getElementById('m-tot').textContent = vendas.length;
+  document.getElementById('m-rec').textContent = 'R$ ' + totRec.toFixed(2);
+  document.getElementById('m-mar').textContent = med.toFixed(1) + '%';
+  document.getElementById('m-mar').className = 'val ' + (med >= 0 ? 'green' : 'red');
+  document.getElementById('m-luc').textContent = 'R$ ' + totLuc.toFixed(2);
+  document.getElementById('m-luc').className = 'val ' + (totLuc >= 0 ? 'green' : 'red');
+}
+
+function enviarWpp(v) {
+  const m = calcMargem(v);
+  const msg = `🛒 *Nova venda — ML*\n📦 ${v.title}\n\n💰 Preço: R$ ${m.preco.toFixed(2)}\n🏷️ Taxa ML: R$ ${m.taxaML.toFixed(2)}\n🚚 Frete: R$ ${m.frete.toFixed(2)}\n📊 Imposto: R$ ${m.imp.toFixed(2)}\n📦 Embalagem: R$ ${m.emb.toFixed(2)}\n🏭 CMV: R$ ${m.cmv.toFixed(2)}\n\n📉 Custos totais: R$ ${m.custos.toFixed(2)}\n✅ Margem: ${m.margem.toFixed(1)}%\n💵 Lucro líquido: R$ ${m.lucro.toFixed(2)}`;
+  window.open('https://wa.me/' + cfg.wpp + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// ── API ML ──
+async function buscarVendas() {
+  const token = getToken();
+  if (!token) { setStatus('Token não encontrado — vá em Conta ML', false); return; }
+  setStatus('Buscando vendas...', false);
+  try {
+    const uid = getUserId();
+    const r = await fetch(`https://api.mercadolibre.com/orders/search?seller=${uid}&sort=date_desc&limit=50`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (r.status === 401) { await renovarToken(); buscarVendas(); return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const novas = (d.results || []).flatMap(o => (o.order_items || []).map(i => ({
+      title: i.item?.title || '',
+      item_id: i.item?.id || '',
+      unit_price: i.unit_price || 0,
+      quantity: i.quantity || 1,
+      sale_fee: o.payments?.[0]?.marketplace_fee || 0,
+      shipping_cost: o.shipping?.cost || 0,
+      date_created: o.date_created,
+      order_id: o.id,
+    })));
+    const novidades = novas.filter(v => !vendaIds.has(v.order_id));
+    novas.forEach(v => vendaIds.add(v.order_id));
+    vendas = novas;
+    renderVendas();
+    setStatus('Conectado', true);
+    document.getElementById('ultima-att').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR');
+    if (novidades.length > 0 && cfg.wpp) novidades.forEach(v => enviarWpp(v));
+  } catch (e) { setStatus('Erro: ' + e.message, false); }
+}
+
+function setStatus(txt, ok) {
+  document.getElementById('dot').className = 'dot' + (ok ? ' ok' : ' err');
+  document.getElementById('stxt').textContent = txt;
+}
+
+function mostrarStatus(id, msg, tipo, inline) {
+  if (inline) {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = msg; el.style.color = tipo === 'ok' ? 'var(--green)' : 'var(--red)'; }
+    return;
+  }
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status-msg ' + tipo;
+  el.style.display = 'block';
+}
+
+function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function reiniciarTimer() {
+  if (timerAuto) clearInterval(timerAuto);
+  timerAuto = setInterval(buscarVendas, (cfg.int || 5) * 60 * 1000);
+}
+
+window.onload = () => {
+  carregarCfg();
+  carregarProdutos();
+  const at = localStorage.getItem('ml_access_token');
+  const rt = localStorage.getItem('ml_refresh_token');
+  const uid = localStorage.getItem('ml_user_id');
+  if (at) document.getElementById('a-access').value = at;
+  if (rt) document.getElementById('a-refresh').value = rt;
+  if (uid) document.getElementById('a-userid').value = uid;
+  atualizarInfoToken();
+  setInterval(renovarToken, 21300000);
+  reiniciarTimer();
+  buscarVendas();
+};
+</script>
+</body>
+</html>
